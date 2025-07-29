@@ -1,38 +1,50 @@
-name: MLflow Churn Prediction Training # Nama workflow di GitHub Actions
+name: MLflow Churn Prediction Training # Nama workflow yang akan muncul di GitHub Actions
 
 on:
   push:
     branches:
-      - main # Workflow akan berjalan setiap kali ada push ke cabang 'main'
+      - main # Workflow akan terpicu setiap kali ada push ke cabang 'main'
 
 jobs:
   train_model:
-    runs-on: ubuntu-latest # Menggunakan runner Ubuntu terbaru yang disediakan GitHub
+    runs-on: ubuntu-latest # Menggunakan runner (mesin virtual) Ubuntu terbaru dari GitHub
 
     steps:
       - name: Checkout Repository
-        uses: actions/checkout@v4 # Mengambil kode repositori Anda
+        uses: actions/checkout@v4 # Mengkloning kode repositori Anda ke runner
 
       - name: Set up Conda Environment
-        # Action ini akan membuat lingkungan Conda DAN mengaktifkannya untuk langkah-langkah berikutnya.
+        # Action ini akan membuat dan secara otomatis mengaktifkan lingkungan Conda
+        # yang didefinisikan dalam MLProject/conda.yaml.
         uses: conda-incubator/setup-miniconda@v3
         with:
-          python-version: 3.9 # Pastikan ini cocok dengan versi di conda.yaml
-          environment-file: MLProject/conda.yaml # Path ke file conda.yaml Anda
-          # auto-activate-base: false # Tidak perlu lagi karena kita akan mengaktifkan lingkungan spesifik
-          activate-environment: mlflow_churn_env # <--- PENTING: Aktifkan lingkungan ini secara otomatis
+          python-version: 3.9 # Pastikan versi Python ini cocok dengan di conda.yaml
+          environment-file: MLProject/conda.yaml # Path relatif ke file conda.yaml Anda
+          activate-environment: mlflow_churn_env # Mengaktifkan lingkungan ini untuk langkah selanjutnya
 
       - name: Run MLflow Project
-        # Karena 'activate-environment' sudah mengaktifkan lingkungan,
-        # kita tidak perlu lagi 'conda activate' secara manual di sini.
-        # Tetap gunakan 'shell: bash -l {0}' untuk kompatibilitas Conda yang lebih baik.
+        # Perintah ini dijalankan dalam shell login bash (-l)
+        # untuk memastikan lingkungan Conda aktif dengan benar.
+        # Karena mlflow.set_tracking_uri("http://localhost:5000") sudah dihapus/dikomentari,
+        # MLflow akan otomatis menggunakan backend file system (folder 'mlruns/').
         shell: bash -l {0}
         run: |
-          # conda activate mlflow_churn_env # <--- BARIS INI TIDAK LAGI DIPERLUKAN
-          mlflow run MLProject/ -e train_model # Menjalankan proyek MLflow dari folder MLProject/
+          mlflow run MLProject/ -e train_model # Menjalankan proyek MLflow Anda
 
       - name: Upload Confusion Matrix as GitHub Artifact
+        # Mengunggah file confusion matrix yang dihasilkan oleh skrip modelling.py.
+        # Ini akan muncul di bagian 'Artifacts' pada halaman ringkasan run GitHub Actions.
         uses: actions/upload-artifact@v4
         with:
-          name: confusion-matrix-report
-          path: confusion_matrix_Random_Forest_Classifier.csv
+          name: confusion-matrix-report # Nama artefak di GitHub Actions
+          path: confusion_matrix_Random_Forest_Classifier.csv # Path relatif ke file yang diunggah
+
+      - name: Upload MLflow Tracking Data (mlruns) as GitHub Artifact
+        # Mengunggah seluruh folder 'mlruns' yang berisi semua metrik,
+        # parameter, dan model yang dicatat oleh MLflow.
+        # Anda bisa mengunduh folder ini dan melihatnya secara lokal
+        # dengan menjalankan 'mlflow ui --backend-store-uri file:///path/to/downloaded/mlruns'.
+        uses: actions/upload-artifact@v4
+        with:
+          name: mlflow-tracking-data # Nama artefak di GitHub Actions
+          path: mlruns/ # Path relatif ke folder mlruns/ yang dihasilkan
