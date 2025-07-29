@@ -17,27 +17,25 @@ jobs:
         uses: conda-incubator/setup-miniconda@v3
         with:
           python-version: 3.9
-          environment-file: MLProject/conda.yaml
+          environment-file: MLProject/conda.yaml # Konteks file ini tetap di MLProject/
           activate-environment: mlflow_churn_env
 
       - name: Run MLflow Project and Get Run ID
         id: mlflow_run_step
         shell: bash -l {0}
         run: |
+          # Jalankan mlflow dari root repositori.
+          # Ini akan membuat folder mlruns di root repositori.
           mlflow run MLProject/ -e train_model
 
-          # --- TANGKAP MLFLOW RUN ID DENGAN LEBIH ANDAL ---
-          # Temukan folder run terbaru di mlruns/
           LATEST_RUN_DIR=$(find mlruns/ -maxdepth 2 -type d -name "????????????????????????????????" | sort -r | head -n 1)
           if [ -z "$LATEST_RUN_DIR" ]; then
             echo "Error: Could not find any MLflow run directory in mlruns/."
             exit 1
           fi
-          # Ekstrak RUN_ID dari path direktori
           LATEST_RUN_ID=$(basename "$LATEST_RUN_DIR")
           echo "Detected MLflow Run ID: $LATEST_RUN_ID"
           echo "MLFLOW_RUN_ID=$LATEST_RUN_ID" >> $GITHUB_ENV
-          # ------------------------------------------------
 
       - name: Docker Login
         uses: docker/login-action@v3
@@ -48,14 +46,16 @@ jobs:
       - name: Build and Push Docker Image
         shell: bash -l {0}
         run: |
-          DOCKER_IMAGE_NAME="your-dockerhub-username/churn-prediction-model:latest" # Atau gunakan tag versi dinamis, misal: "v${{ github.run_number }}"
+          DOCKER_IMAGE_NAME="your-dockerhub-username/churn-prediction-model:${{ env.MLFLOW_RUN_ID }}"
 
           echo "Building Docker image for MLflow Run ID: ${{ env.MLFLOW_RUN_ID }}"
 
-          # Lakukan proses build Docker
+          # Lakukan proses build Docker DARI ROOT REPOSITORY.
+          # Dockerfile sekarang berada di MLProject/Dockerfile,
+          # tapi konteks build adalah '.' (root repo).
           docker build -t "${DOCKER_IMAGE_NAME}" \
                        --build-arg MLFLOW_RUN_ID=${{ env.MLFLOW_RUN_ID }} \
-                       ./MLProject # <-- Context build adalah folder MLProject/
+                       -f MLProject/Dockerfile . # <--- UBAH BARIS INI: -f menunjuk Dockerfile, . adalah konteks build (root)
 
           echo "Pushing Docker image to Docker Hub: ${DOCKER_IMAGE_NAME}"
           docker push "${DOCKER_IMAGE_NAME}"
