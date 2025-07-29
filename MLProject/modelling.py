@@ -7,10 +7,6 @@ import mlflow.sklearn
 import numpy as np
 import os
 
-# --- ATUR TRACKING URI DI SINI ---
-# Pastikan MLflow Tracking UI berjalan (biasanya di http://localhost:5000)
-mlflow.set_tracking_uri("http://localhost:5000")
-# ---------------------------------
 
 # --- 1. Memuat Data ---
 # Pastikan 'churn_train_preprocessed.csv' dan 'churn_test_preprocessed.csv' ada di direktori yang sama
