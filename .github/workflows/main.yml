@@ -17,10 +17,13 @@ jobs:
         uses: conda-incubator/setup-miniconda@v3
         with:
           python-version: 3.10.10
-          environment-file: MLProject/conda.yaml # Path ke conda.yaml Anda
+          environment-file: MLProject/conda.yaml
           auto-activate-base: false
 
       - name: Run MLflow Project
+        # Penting: Gunakan 'shell: bash -l {0}' atau 'shell: bash --login -eo pipefail {0}'
+        # untuk memastikan lingkungan Conda diinisialisasi dengan benar.
+        shell: bash -l {0} # Atau shell: bash --login -eo pipefail {0}
         run: |
           conda activate mlflow_churn_env
-          mlflow run MLProject/ -e train_model # Perintah ini sudah benar
+          mlflow run MLProject/ -e train_model
