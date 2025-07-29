@@ -1,0 +1,13 @@
+name: mlflow_churn_env
+channels:
+  - defaults
+  - conda-forge
+dependencies:
+  - python=3.10.10
+  - pandas
+  - scikit-learn
+  - numpy
+  - mlflow
+  - pip
+  - pip:
+    - ipykernel

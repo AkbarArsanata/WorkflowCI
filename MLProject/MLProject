@@ -1,0 +1,7 @@
+# MLProject (file tanpa ekstensi)
+
+name: ChurnPredictionProject
+conda_env: conda.yaml
+entry_points:
+  train_model:
+    command: "python modelling.py"

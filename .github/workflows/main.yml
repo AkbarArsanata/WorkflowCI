@@ -1,0 +1,26 @@
+name: MLflow Churn Prediction Training
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  train_model:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Conda Environment
+        uses: conda-incubator/setup-miniconda@v3
+        with:
+          python-version: 3.9
+          environment-file: MLProject/conda.yaml # Path ke conda.yaml Anda
+          auto-activate-base: false
+
+      - name: Run MLflow Project
+        run: |
+          conda activate mlflow_churn_env
+          mlflow run MLProject/ -e train_model # Perintah ini sudah benar
