@@ -1,29 +1,41 @@
-name: MLflow Churn Prediction Training
+name: MLflow Churn Prediction Training # Nama workflow di GitHub Actions
 
 on:
   push:
     branches:
-      - main
+      - main # Workflow akan berjalan setiap kali ada push ke cabang 'main'
 
 jobs:
   train_model:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-latest # Menggunakan runner Ubuntu terbaru yang disediakan GitHub
 
     steps:
       - name: Checkout Repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v4 # Mengambil kode repositori Anda
 
       - name: Set up Conda Environment
+        # Action ini akan membuat dan mengaktifkan lingkungan Conda
         uses: conda-incubator/setup-miniconda@v3
         with:
-          python-version: 3.10.10
-          environment-file: MLProject/conda.yaml
-          auto-activate-base: false
+          python-version: 3.9 # Pastikan ini cocok dengan versi di conda.yaml
+          environment-file: MLProject/conda.yaml # Path ke file conda.yaml Anda
+          auto-activate-base: false # Mencegah aktivasi lingkungan dasar secara otomatis
 
       - name: Run MLflow Project
-        # Penting: Gunakan 'shell: bash -l {0}' atau 'shell: bash --login -eo pipefail {0}'
-        # untuk memastikan lingkungan Conda diinisialisasi dengan benar.
-        shell: bash -l {0} # Atau shell: bash --login -eo pipefail {0}
+        # Penting: Menggunakan 'bash -l {0}' untuk memastikan lingkungan Conda diinisialisasi
+        # dengan benar dalam shell non-interaktif di GitHub Actions.
+        shell: bash -l {0}
         run: |
-          conda activate mlflow_churn_env
-          mlflow run MLProject/ -e train_model
+          conda activate mlflow_churn_env # Mengaktifkan lingkungan Conda
+          mlflow run MLProject/ -e train_model # Menjalankan proyek MLflow dari folder MLProject/
+
+      - name: Upload Confusion Matrix as GitHub Artifact
+        # Ini akan mengunggah file confusion matrix ke artefak GitHub Actions.
+        # File ini akan tersedia untuk diunduh dari halaman run GitHub Actions.
+        # Pastikan nama file ini (confusion_matrix_Random_Forest_Classifier.csv)
+        # sama persis dengan yang dihasilkan oleh skrip modelling.py Anda.
+        # Path ini diasumsikan relatif terhadap root repositori.
+        uses: actions/upload-artifact@v4
+        with:
+          name: confusion-matrix-report
+          path: confusion_matrix_Random_Forest_Classifier.csv
