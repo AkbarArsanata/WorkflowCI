@@ -50,7 +50,7 @@ jobs:
         run: |
           # Nama image Docker yang akan di-push ke Docker Hub.
           # Menggunakan MLflow Run ID sebagai tag versi.
-          DOCKER_IMAGE_NAME="your-dockerhub-username/churn-prediction-model:${{ env.MLFLOW_RUN_ID }}"
+          DOCKER_IMAGE_NAME="ibrahimakbararsanata/churn-prediction-model:${{ env.MLFLOW_RUN_ID }}"
 
           echo "Building Docker image for MLflow Run ID: ${{ env.MLFLOW_RUN_ID }}"
 
