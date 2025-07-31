@@ -25,25 +25,16 @@ jobs:
 
       - name: Configure MLflow Tracking (Optional)
         run: |
-          # If you use an external MLflow Tracking Server, configure it here.
-          # Example: export MLFLOW_TRACKING_URI=http://your-mlflow-tracking-server:5000
-          # If you do not set MLFLOW_TRACKING_URI, MLflow will use the local mlruns directory by default.
           echo "MLflow tracking configuration complete (if any)."
+          # export MLFLOW_TRACKING_URI=http://your-mlflow-server:5000
 
       - name: Run MLflow Project and Get Run ID
         id: run_mlflow
         run: |
-          # Remove old mlruns directory to avoid confusion with new run IDs
           rm -rf mlruns
-          
-          # Run the MLflow project
-          # Removed --no-conda and --no-tracking-uri as they are not valid options for mlflow run
+
           conda run -n mlflow_churn_env mlflow run MLProject/ -e train_model 2>&1
 
-          # --- CRITICAL PART: More robust Run ID extraction ---
-          # After 'mlflow run' completes, the model is logged in a subfolder within mlruns.
-          # Assuming the default experiment is '0' or you know your experiment ID.
-          # Find the newest subdirectory (the one just created) under mlruns/0/
           RUN_DIR=$(find mlruns/0 -maxdepth 1 -mindepth 1 -type d -printf '%T@ %p\n' | sort -n | tail -n 1 | awk '{print $2}')
           
           if [ -z "$RUN_DIR" ]; then
@@ -51,16 +42,14 @@ jobs:
               exit 1
           fi
           
-          # Extract the Run ID from the directory name
           run_id=$(basename "$RUN_DIR")
-          # --- END CRITICAL PART ---
-
           echo "Detected MLflow Run ID: $run_id"
-          echo "run_id=$run_id" >> $GITHUB_OUTPUT 
+          echo "run_id=$run_id" >> $GITHUB_OUTPUT
 
   build_and_push_docker:
     runs-on: ubuntu-latest
     needs: train_model
+
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
@@ -77,10 +66,7 @@ jobs:
         uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKER_USERNAME }}
-          password: ${{ secrets.DOCKER_ACCESS_TOKEN  }} # <--- Ensure this line exists and points to your secret
-          # Remove 'ecr: auto' and 'logout: true' unless you specifically need them.
-          # 'ecr: auto' is for AWS ECR, not DockerHub.
-          # 'logout: true' is default behavior, no need to explicitly state it.
+          password: ${{ secrets.DOCKER_ACCESS_TOKEN }}
 
       - name: Build and Push MLflow Model Docker Image
         run: |
@@ -93,9 +79,13 @@ jobs:
 
           echo "Building Docker image for MLflow Run ID: $MLFLOW_RUN_ID"
           
+          # Step 1: Build Docker image from MLflow
           conda run -n mlflow_churn_env mlflow models build-docker \
             --model-uri "runs:/$MLFLOW_RUN_ID/model" \
-            --name ibrahimakbararsanata/churn-prediction-model \
-            --tag latest
+            --name churn-prediction-model
 
+          # Step 2: Tag image for DockerHub
+          docker tag churn-prediction-model:latest ibrahimakbararsanata/churn-prediction-model:latest
+
+          # Step 3: Push image to DockerHub
           docker push ibrahimakbararsanata/churn-prediction-model:latest
