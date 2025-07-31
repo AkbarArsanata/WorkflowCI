@@ -8,7 +8,6 @@ on:
 jobs:
   train_model:
     runs-on: ubuntu-latest
-    # Mengekspor run_id agar bisa digunakan di job selanjutnya
     outputs:
       run_id: ${{ steps.run_mlflow.outputs.run_id }}
 
@@ -20,58 +19,47 @@ jobs:
         uses: conda-incubator/setup-miniconda@v3
         with:
           python-version: 3.9
-          environment-file: MLProject/conda.yaml # Pastikan path ke conda.yaml benar
+          environment-file: MLProject/conda.yaml
           auto-activate-base: false
-          # Penting: Ini akan secara otomatis mengaktifkan lingkungan ini untuk langkah-langkah selanjutnya
-          activate-environment: mlflow_churn_env 
+          activate-environment: mlflow_churn_env
 
       - name: Configure MLflow Tracking (Opsional)
         run: |
-          # Jika Anda menggunakan MLflow Tracking Server eksternal (bukan default lokal), konfigurasikan di sini.
-          # Contoh: export MLFLOW_TRACKING_URI=http://your-mlflow-tracking-server:5000
-          # Jika Anda ingin menyimpan artefak model ke S3/GCS/Azure Blob, konfigurasikan kredensial di sini.
-          # export AWS_ACCESS_KEY_ID=${{ secrets.AWS_ACCESS_KEY_ID }}
-          # export AWS_SECRET_ACCESS_KEY=${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          # export MLFLOW_S3_ENDPOINT_URL=...
-          echo "MLflow tracking configuration complete (if any)." # Pesan dummy jika tidak ada konfigurasi spesifik
+          # ... (konfigurasi MLflow tracking server jika ada)
+          echo "MLflow tracking configuration complete (if any)."
 
       - name: Run MLflow Project and Get Run ID
-        id: run_mlflow # Memberi ID pada langkah ini untuk mengambil outputnya
+        id: run_mlflow
         run: |
-          # Perintah ini sekarang berjalan di dalam lingkungan 'mlflow_churn_env'
-          # karena `activate-environment` di setup-miniconda.
-          # --no-conda agar MLflow tidak mencoba membuat lingkungan conda baru (kita sudah punya)
-          # --no-tracking-uri jika Anda hanya melog ke mlruns lokal di runner dan tidak ada tracking server eksternal
-          run_output=$(mlflow run MLProject/ -e train_model --no-conda --no-tracking-uri 2>&1)
-          echo "$run_output" # Cetak output lengkap untuk debugging
+          # Hapus direktori mlruns lama agar tidak salah mengambil run ID
+          rm -rf mlruns
           
-          # Coba ekstrak Run ID dari output MLflow Run
-          # Menambahkan fallback yang lebih robust untuk mengekstrak Run ID dari folder mlruns
-          run_id=$(echo "$run_output" | grep "Run 'train_model' successfully finished" | awk '{print $NF}' | sed 's/\.$//' | tr -d '\r')
+          # Jalankan MLflow project
+          # Gunakan `--no-conda` karena lingkungan sudah diaktifkan oleh setup-miniconda.
+          # Gunakan `--no-tracking-uri` jika tidak ada MLflow Tracking Server eksternal.
+          mlflow run MLProject/ -e train_model --no-conda --no-tracking-uri
+
+          # --- BAGIAN KRITIS: Ekstraksi Run ID yang lebih robust ---
+          # Setelah 'mlflow run' selesai, model di-log di subfolder mlruns.
+          # Asumsi: eksperimen default adalah '0' atau Anda tahu ID eksperimen Anda.
+          # Mencari subdirektori terbaru (yang baru dibuat) di bawah mlruns/0/
+          RUN_DIR=$(find mlruns/0 -maxdepth 1 -mindepth 1 -type d -printf '%T@ %p\n' | sort -n | tail -n 1 | awk '{print $2}')
           
-          if [ -z "$run_id" ]; then
-            echo "Failed to extract run_id from mlflow run output. Attempting alternative extraction from mlruns folder."
-            # Jika ekstraksi langsung gagal, cari Run ID terbaru di folder mlruns
-            # Ini mengasumsikan model di-log di bawah suatu eksperimen, dan kita mencari run ID terbaru.
-            # Mungkin perlu penyesuaian tergantung struktur mlruns Anda.
-            # Contoh: find mlruns -maxdepth 3 -type d -name "*-*-*" | sort | tail -n 1 | xargs basename
-            # Untuk skenario umum dengan 0 sebagai eksperimen default:
-            run_id=$(find mlruns/0 -maxdepth 2 -type d -printf '%T@ %f\n' | sort -n | tail -n 1 | awk '{print $2}' | tr -d '\r')
-            
-            if [ -z "$run_id" ]; then
-              echo "Still failed to extract run_id. Cannot proceed with Docker build."
+          if [ -z "$RUN_DIR" ]; then
+              echo "Error: Could not find MLflow run directory. Cannot extract Run ID."
               exit 1
-            fi
-            echo "Extracted Run ID via fallback: $run_id"
           fi
+          
+          # Ekstrak Run ID dari nama direktori
+          run_id=$(basename "$RUN_DIR")
+          # --- AKHIR BAGIAN KRITIS ---
 
           echo "Detected MLflow Run ID: $run_id"
-          # Membuat Run ID tersedia sebagai output dari job ini
-          echo "run_id=$run_id" >> $GITHUB_OUTPUT 
+          echo "run_id=$run_id" >> $GITHUB_OUTPUT
 
   build_and_push_docker:
     runs-on: ubuntu-latest
-    needs: train_model # Job ini bergantung pada selesainya job train_model
+    needs: train_model
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
@@ -80,20 +68,18 @@ jobs:
         uses: conda-incubator/setup-miniconda@v3
         with:
           python-version: 3.9
-          environment-file: MLProject/conda.yaml # Pastikan conda.yaml konsisten
+          environment-file: MLProject/conda.yaml
           auto-activate-base: false
-          # Penting: Aktifkan juga lingkungan Conda di job ini untuk perintah MLflow
-          activate-environment: mlflow_churn_env 
+          activate-environment: mlflow_churn_env
 
       - name: Login to DockerHub
         uses: docker/login-action@v3
         with:
-          username: ${{ secrets.DOCKER_USERNAME }} # Mengambil username dari GitHub Secrets
-          password: ${{ secrets.DOCKER_PASSWORD }} # Mengambil password/token dari GitHub Secrets
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
 
       - name: Build and Push MLflow Model Docker Image
         run: |
-          # Mendapatkan Run ID yang diekspor dari job train_model
           MLFLOW_RUN_ID="${{ needs.train_model.outputs.run_id }}"
           
           if [ -z "$MLFLOW_RUN_ID" ]; then
@@ -103,13 +89,9 @@ jobs:
 
           echo "Building Docker image for MLflow Run ID: $MLFLOW_RUN_ID"
           
-          # Membangun image Docker menggunakan Run ID yang sebenarnya
-          # Model akan diambil dari runs:/<Run ID>/model
-          # Pastikan "model" adalah nama artefak model Anda
           mlflow models build-docker \
             --model-uri "runs:/$MLFLOW_RUN_ID/model" \
             --name ibrahimakbararsanata/churn-prediction-model \
-            --tag latest # Gunakan 'latest' atau tag unik lainnya seperti "$MLFLOW_RUN_ID"
+            --tag latest
 
-          # Mendorong image yang baru dibangun ke DockerHub
           docker push ibrahimakbararsanata/churn-prediction-model:latest
