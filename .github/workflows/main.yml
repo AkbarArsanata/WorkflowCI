@@ -25,16 +25,22 @@ jobs:
 
       - name: Configure MLflow Tracking (Opsional)
         run: |
+          # Jika Anda menggunakan MLflow Tracking Server eksternal, konfigurasikan di sini.
+          # Contoh: export MLFLOW_TRACKING_URI=http://your-mlflow-tracking-server:5000
+          # Jika Anda tidak mengatur MLFLOW_TRACKING_URI, MLflow akan menggunakan direktori mlruns lokal secara default.
           echo "MLflow tracking configuration complete (if any)."
 
       - name: Run MLflow Project and Get Run ID
         id: run_mlflow
         run: |
+          # Hapus direktori mlruns lama agar tidak salah mengambil run ID
           rm -rf mlruns
           
-          # Hapus --no-conda di sini
-          conda run -n mlflow_churn_env mlflow run MLProject/ -e train_model --no-tracking-uri 2>&1
+          # Jalankan MLflow project
+          # Hapus --no-tracking-uri di sini
+          conda run -n mlflow_churn_env mlflow run MLProject/ -e train_model 2>&1
 
+          # --- BAGIAN KRITIS: Ekstraksi Run ID yang lebih robust ---
           RUN_DIR=$(find mlruns/0 -maxdepth 1 -mindepth 1 -type d -printf '%T@ %p\n' | sort -n | tail -n 1 | awk '{print $2}')
           
           if [ -z "$RUN_DIR" ]; then
@@ -43,7 +49,8 @@ jobs:
           fi
           
           run_id=$(basename "$RUN_DIR")
-          
+          # --- AKHIR BAGIAN KRITIS ---
+
           echo "Detected MLflow Run ID: $run_id"
           echo "run_id=$run_id" >> $GITHUB_OUTPUT 
 
