@@ -34,10 +34,8 @@ jobs:
           # Hapus direktori mlruns lama agar tidak salah mengambil run ID
           rm -rf mlruns
           
-          # Jalankan MLflow project
-          # Gunakan `--no-conda` karena lingkungan sudah diaktifkan oleh setup-miniconda.
-          # Gunakan `--no-tracking-uri` jika tidak ada MLflow Tracking Server eksternal.
-          mlflow run MLProject/ -e train_model --no-conda --no-tracking-uri
+          # Gunakan 'conda run -n mlflow_churn_env' untuk memastikan perintah 'mlflow' ditemukan
+          conda run -n mlflow_churn_env mlflow run MLProject/ -e train_model --no-conda --no-tracking-uri
 
           # --- BAGIAN KRITIS: Ekstraksi Run ID yang lebih robust ---
           # Setelah 'mlflow run' selesai, model di-log di subfolder mlruns.
@@ -89,7 +87,8 @@ jobs:
 
           echo "Building Docker image for MLflow Run ID: $MLFLOW_RUN_ID"
           
-          mlflow models build-docker \
+          # Gunakan 'conda run -n mlflow_churn_env' untuk memastikan perintah 'mlflow' ditemukan
+          conda run -n mlflow_churn_env mlflow models build-docker \
             --model-uri "runs:/$MLFLOW_RUN_ID/model" \
             --name ibrahimakbararsanata/churn-prediction-model \
             --tag latest
