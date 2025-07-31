@@ -25,17 +25,20 @@ jobs:
 
       - name: Configure MLflow Tracking (Optional)
         run: |
+          set -e
           echo "Using local MLflow tracking (mlruns/ directory)."
           # export MLFLOW_TRACKING_URI=http://your-server:5000
 
       - name: Run MLflow Project
         run: |
+          set -e
           rm -rf mlruns
           conda run -n mlflow_churn_env mlflow run MLProject/ -e train_model
 
       - name: Get Run ID from mlruns directory
         id: get_run_id
         run: |
+          set -e
           EXPERIMENT_DIR="mlruns/0"
 
           if [ ! -d "$EXPERIMENT_DIR" ]; then
@@ -46,12 +49,18 @@ jobs:
           RUN_DIR=$(find "$EXPERIMENT_DIR" -maxdepth 1 -mindepth 1 -type d -printf '%T@ %p\n' | sort -n | tail -n 1 | awk '{print $2}')
 
           if [ -z "$RUN_DIR" ]; then
-            echo "Error: Could not find MLflow run directory."
+            echo "Error: Could not find latest MLflow run directory."
             exit 1
           fi
 
           run_id=$(basename "$RUN_DIR")
           echo "Extracted Run ID: $run_id"
+
+          if [[ "$run_id" == "datasets" || -z "$run_id" ]]; then
+            echo "Invalid run ID: $run_id"
+            exit 1
+          fi
+
           echo "run_id=$run_id" >> $GITHUB_OUTPUT
 
   build_and_push_docker:
@@ -76,14 +85,17 @@ jobs:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_ACCESS_TOKEN }}
 
+      - name: Debug Run ID
+        run: |
+          echo "Run ID received: ${{ needs.train_model.outputs.run_id }}"
+
       - name: Build and Push MLflow Model Docker Image
         run: |
+          set -e
           MLFLOW_RUN_ID="${{ needs.train_model.outputs.run_id }}"
 
-          echo "Received MLflow Run ID: $MLFLOW_RUN_ID"
-
-          if [ -z "$MLFLOW_RUN_ID" ]; then
-            echo "Error: MLflow Run ID not found. Exiting."
+          if [ -z "$MLFLOW_RUN_ID" ] || [ "$MLFLOW_RUN_ID" == "datasets" ]; then
+            echo "Error: Invalid MLflow Run ID: $MLFLOW_RUN_ID"
             exit 1
           fi
 
