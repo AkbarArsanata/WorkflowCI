@@ -8,8 +8,9 @@ on:
 jobs:
   train_model:
     runs-on: ubuntu-latest
+    # Output dari job ini akan digunakan oleh job berikutnya
     outputs:
-      run_id: ${{ steps.run_mlflow.outputs.run_id }}
+      run_id: ${{ steps.get_mlflow_run_id.outputs.run_id }} # Mengambil output dari step yang namanya 'get_mlflow_run_id'
 
     steps:
       - name: Checkout Repository
@@ -30,20 +31,22 @@ jobs:
           # If you do not set MLFLOW_TRACKING_URI, MLflow will use the local mlruns directory by default.
           echo "MLflow tracking configuration complete (if any)."
 
-      - name: Run MLflow Project and Get Run ID
-        id: run_mlflow
+      - name: Run MLflow Project
+        # Memberikan ID ke langkah ini agar outputnya bisa direferensikan
+        id: run_mlflow_project # Nama ID yang lebih deskriptif
         run: |
           # Remove old mlruns directory to avoid confusion with new run IDs
           rm -rf mlruns
           
           # Run the MLflow project
-          # Removed --no-conda and --no-tracking-uri as they are not valid options for mlflow run
-          conda run -n mlflow_churn_env mlflow run MLProject/ -e train_model 2>&1
+          # Output (stdout/stderr) dari command ini akan berisi informasi run ID
+          conda run -n mlflow_churn_env mlflow run MLProject/ -e train_model
 
-          # --- CRITICAL PART: More robust Run ID extraction ---
-          # After 'mlflow run' completes, the model is logged in a subfolder within mlruns.
-          # Assuming the default experiment is '0' or you know your experiment ID.
-          # Find the newest subdirectory (the one just created) under mlruns/0/
+      - name: Get MLflow Run ID
+        id: get_mlflow_run_id # Memberikan ID ke langkah ini untuk mengambil output
+        run: |
+          # Mencari direktori run terbaru di mlruns/0/
+          # Ini adalah cara paling robust untuk mendapatkan run ID yang baru dibuat
           RUN_DIR=$(find mlruns/0 -maxdepth 1 -mindepth 1 -type d -printf '%T@ %p\n' | sort -n | tail -n 1 | awk '{print $2}')
           
           if [ -z "$RUN_DIR" ]; then
@@ -51,15 +54,16 @@ jobs:
               exit 1
           fi
           
-          # Extract the Run ID from the directory name
+          # Ekstrak Run ID dari nama direktori
           run_id=$(basename "$RUN_DIR")
-          # --- END CRITICAL PART ---
-
+          
           echo "Detected MLflow Run ID: $run_id"
-          echo "run_id=$run_id" >> $GITHUB_OUTPUT 
+          # Set output run_id untuk job ini agar bisa diakses oleh job lain
+          echo "run_id=$run_id" >> $GITHUB_OUTPUT
 
   build_and_push_docker:
     runs-on: ubuntu-latest
+    # Job ini bergantung pada job train_model dan akan mengambil outputnya
     needs: train_model
     steps:
       - name: Checkout Repository
@@ -77,10 +81,11 @@ jobs:
         uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKER_USERNAME }}
-          password: ${{ secrets.DOCKER_ACCESS_TOKEN }} # <--- Pastikan ini menunjuk ke secret Anda
+          password: ${{ secrets.DOCKER_ACCESS_TOKEN }}
 
       - name: Build and Push MLflow Model Docker Image
         run: |
+          # Mengambil Run ID dari output job train_model
           MLFLOW_RUN_ID="${{ needs.train_model.outputs.run_id }}"
           
           if [ -z "$MLFLOW_RUN_ID" ]; then
@@ -90,10 +95,9 @@ jobs:
 
           echo "Building Docker image for MLflow Run ID: $MLFLOW_RUN_ID"
           
-          # Baris ini telah diperbaiki:
-          # Opsi --tag dihapus, dan tag 'latest' sekarang menjadi bagian dari --name.
+          # Perintah build-docker yang sudah diperbaiki (tanpa --tag)
           conda run -n mlflow_churn_env mlflow models build-docker \
             --model-uri "runs:/$MLFLOW_RUN_ID/model" \
-            --name ibrahimakbararsanata/churn-prediction-model:latest # Nama repository dan tag digabung
+            --name ibrahimakbararsanata/churn-prediction-model:latest
 
           docker push ibrahimakbararsanata/churn-prediction-model:latest
