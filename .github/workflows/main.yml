@@ -1,79 +1,109 @@
-name: MLflow Churn Prediction Training and Docker Build # Nama workflow
+name: MLflow Churn Prediction Training
 
 on:
   push:
     branches:
-      - main # Workflow terpicu setiap push ke cabang 'main'
+      - main
 
 jobs:
-  train_model_and_build_docker: # Nama job
-    runs-on: ubuntu-latest # Menggunakan runner Ubuntu terbaru dari GitHub
+  train_model:
+    runs-on: ubuntu-latest
+    outputs:
+      run_id: ${{ steps.run_mlflow.outputs.run_id }} # Export Run ID
 
     steps:
       - name: Checkout Repository
-        uses: actions/checkout@v4 # Mengkloning kode repositori
+        uses: actions/checkout@v4
 
       - name: Set up Conda Environment
         uses: conda-incubator/setup-miniconda@v3
         with:
-          python-version: 3.9 # Pastikan versi ini cocok dengan di conda.yaml
-          environment-file: MLProject/conda.yaml # Path relatif ke conda.yaml
-          activate-environment: mlflow_churn_env # Mengaktifkan lingkungan Conda
+          python-version: 3.9
+          environment-file: MLProject/conda.yaml
+          auto-activate-base: false
 
-      - name: Run MLflow Project and Get Run ID
-        id: mlflow_run_step # ID untuk langkah ini agar bisa mengambil output
-        shell: bash -l {0} # Menggunakan shell login untuk lingkungan Conda
+      - name: Configure MLflow Tracking
         run: |
-          # Jalankan proyek MLflow dari root repositori.
-          # Ini akan membuat folder 'mlruns' di root repositori.
-          mlflow run MLProject/ -e train_model
+          conda activate mlflow_churn_env
+          # Jika Anda menggunakan MLflow Tracking Server eksternal, konfigurasikan di sini
+          # export MLFLOW_TRACKING_URI=http://your-mlflow-tracking-server:5000
+          # Jika Anda ingin menyimpan artefak model ke S3/GCS/Azure Blob, konfigurasikan
+          # export MLFLOW_S3_ENDPOINT_URL=...
+          # export AWS_ACCESS_KEY_ID=...
+          # export AWS_SECRET_ACCESS_KEY=...
 
-          # Tangkap MLflow Run ID terbaru dari folder 'mlruns'.
-          # Ini penting untuk menunjuk model yang benar di Docker image.
-          LATEST_RUN_DIR=$(find mlruns/ -maxdepth 2 -type d -name "????????????????????????????????" | sort -r | head -n 1)
-          if [ -z "$LATEST_RUN_DIR" ]; then
-            echo "Error: Could not find any MLflow run directory in mlruns/."
+      - name: Run MLflow Project
+        id: run_mlflow # Tambahkan ID ke langkah ini
+        run: |
+          conda activate mlflow_churn_env
+          # Menjalankan MLflow project dan mendapatkan Run ID
+          # Outputnya adalah Run ID yang baru saja dibuat
+          run_output=$(mlflow run MLProject/ -e train_model --no-conda --no-tracking-uri)
+          run_id=$(echo "$run_output" | grep "Run 'train_model' successfully finished" | awk '{print $NF}' | sed 's/\.$//')
+          
+          # Jika Run ID tidak dapat diekstrak dari output, Anda mungkin perlu mencari di folder mlruns
+          if [ -z "$run_id" ]; then
+            echo "Failed to extract run_id from mlflow run output."
+            # Anda bisa mencoba membaca run_id dari folder mlruns yang baru dibuat
+            # Misalnya, jika Anda tahu model di-log di subdirektori tertentu
+            # run_id=$(find mlruns -maxdepth 2 -type d -name "*-*-*" -printf '%f\n' | tail -n 1) # Ini adalah contoh, mungkin perlu penyesuaian
             exit 1
           fi
-          LATEST_RUN_ID=$(basename "$LATEST_RUN_DIR")
-          echo "Detected MLflow Run ID: $LATEST_RUN_ID"
-          echo "MLFLOW_RUN_ID=$LATEST_RUN_ID" >> $GITHUB_ENV # Set variabel lingkungan untuk langkah selanjutnya
 
-      - name: Docker Login
-        uses: docker/login-action@v3 # Action untuk login ke Docker Hub
+          echo "Extracted Run ID: $run_id"
+          echo "run_id=$run_id" >> $GITHUB_OUTPUT # Membuat Run ID tersedia sebagai output job
+        # Tambahkan --no-conda jika conda_env di MLProject sudah mencukupi
+        # Tambahkan --no-tracking-uri jika Anda hanya ingin menyimpan artefak secara lokal di runner untuk build Docker
+
+  build_and_push_docker:
+    runs-on: ubuntu-latest
+    needs: train_model # Job ini bergantung pada selesainya train_model
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Conda Environment
+        uses: conda-incubator/setup-miniconda@v3
         with:
-          username: ${{ secrets.DOCKER_USERNAME }} # Menggunakan GitHub Secret untuk username Docker Hub
-          password: ${{ secrets.DOCKER_ACCESS_TOKEN }} # Menggunakan GitHub Secret untuk access token Docker Hub
+          python-version: 3.9
+          environment-file: MLProject/conda.yaml # Pastikan conda.yaml sama
+          auto-activate-base: false
 
-      - name: Build and Push Docker Image
-        shell: bash -l {0}
+      - name: Login to DockerHub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }} # Simpan username DockerHub di GitHub Secrets
+          password: ${{ secrets.DOCKER_PASSWORD }} # Simpan password/token DockerHub di GitHub Secrets
+
+      - name: Pull MLflow Tracking Artifacts
         run: |
-          # Nama image Docker yang akan di-push ke Docker Hub.
-          # Menggunakan MLflow Run ID sebagai tag versi.
-          DOCKER_IMAGE_NAME="ibrahimakbararsanata/churn-prediction-model:${{ env.MLFLOW_RUN_ID }}"
+          conda activate mlflow_churn_env
+          # Jika MLflow Tracking Server Anda bukan lokal di runner, Anda perlu mengunduh artefak model dari sana.
+          # Misalnya, jika Anda melog ke S3, Azure Blob, atau MLflow Tracking Server yang dapat diakses.
+          # Untuk tujuan membangun Docker, MLflow secara otomatis akan menarik artefak yang diperlukan.
+          # Pastikan `MLFLOW_TRACKING_URI` dikonfigurasi di langkah sebelumnya jika Anda tidak menggunakan lokal.
+          echo "MLFLOW_TRACKING_URI: ${{ env.MLFLOW_TRACKING_URI }}" # Untuk debugging
+          echo "Run ID from previous job: ${{ needs.train_model.outputs.run_id }}"
 
-          echo "Building Docker image for MLflow Run ID: ${{ env.MLFLOW_RUN_ID }}"
+      - name: Build and Push MLflow Model Docker Image
+        run: |
+          conda activate mlflow_churn_env
+          # Dapatkan Run ID dari output job sebelumnya
+          MLFLOW_RUN_ID="${{ needs.train_model.outputs.run_id }}"
+          
+          # Cek apakah Run ID berhasil didapatkan
+          if [ -z "$MLFLOW_RUN_ID" ]; then
+            echo "Error: MLflow Run ID not found. Cannot build Docker image."
+            exit 1
+          fi
 
-          # Lakukan proses build Docker.
-          # -t: untuk memberi tag pada image.
-          # --build-arg: untuk meneruskan MLFLOW_RUN_ID ke Dockerfile.
-          # -f MLProject/Dockerfile: menentukan lokasi Dockerfile.
-          # .: konteks build adalah root repositori, sehingga mlruns dapat diakses.
-          docker build -t "${DOCKER_IMAGE_NAME}" \
-                       --build-arg MLFLOW_RUN_ID=${{ env.MLFLOW_RUN_ID }} \
-                       -f MLProject/Dockerfile .
+          echo "Building Docker image for Run ID: $MLFLOW_RUN_ID"
+          
+          # Membangun image Docker menggunakan Run ID yang sebenarnya
+          mlflow models build-docker \
+            --model-uri "runs:/$MLFLOW_RUN_ID/model" \
+            --name ibrahimakbararsanata/churn-prediction-model \
+            --tag latest # Menggunakan tag 'latest' atau gunakan tag unik lainnya
 
-          echo "Pushing Docker image to Docker Hub: ${DOCKER_IMAGE_NAME}"
-          docker push "${DOCKER_IMAGE_NAME}" # Mendorong image ke Docker Hub
-
-      - name: Upload Confusion Matrix as GitHub Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: confusion-matrix-report
-          path: confusion_matrix_Random_Forest_Classifier.csv # Path relatif ke root repo
-
-      - name: Upload MLflow Tracking Data (mlruns) as GitHub Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: mlflow-tracking-data
-          path: mlruns/ # Path relatif ke root repo
+          # Push image ke DockerHub
+          docker push ibrahimakbararsanata/churn-prediction-model:latest
