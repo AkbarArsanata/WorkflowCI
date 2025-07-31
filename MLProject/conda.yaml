@@ -7,7 +7,7 @@ dependencies:
   - pandas
   - scikit-learn
   - numpy
-  - mlflow
+  - mlflow>=1.25.0 # <--- UBAH DI SINI: Tentukan versi minimal 1.25.0
   - pip
   - pip:
     - ipykernel # Opsional, berguna untuk pengembangan lokal di Jupyter
