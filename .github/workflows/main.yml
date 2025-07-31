@@ -77,7 +77,7 @@ jobs:
         uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKER_USERNAME }}
-          password: ${{ secrets.DOCKER_PASSWORD }} # <--- Ensure this line exists and points to your secret
+          password: ${{ secrets.DOCKER_ACCES_TOKEN  }} # <--- Ensure this line exists and points to your secret
           # Remove 'ecr: auto' and 'logout: true' unless you specifically need them.
           # 'ecr: auto' is for AWS ECR, not DockerHub.
           # 'logout: true' is default behavior, no need to explicitly state it.
