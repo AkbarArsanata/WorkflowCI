@@ -21,26 +21,20 @@ jobs:
           python-version: 3.9
           environment-file: MLProject/conda.yaml
           auto-activate-base: false
-          activate-environment: mlflow_churn_env
+          activate-environment: mlflow_churn_env 
 
       - name: Configure MLflow Tracking (Opsional)
         run: |
-          # ... (konfigurasi MLflow tracking server jika ada)
           echo "MLflow tracking configuration complete (if any)."
 
       - name: Run MLflow Project and Get Run ID
         id: run_mlflow
         run: |
-          # Hapus direktori mlruns lama agar tidak salah mengambil run ID
           rm -rf mlruns
           
-          # Gunakan 'conda run -n mlflow_churn_env' untuk memastikan perintah 'mlflow' ditemukan
-          conda run -n mlflow_churn_env mlflow run MLProject/ -e train_model --no-conda --no-tracking-uri
+          # Hapus --no-conda di sini
+          conda run -n mlflow_churn_env mlflow run MLProject/ -e train_model --no-tracking-uri 2>&1
 
-          # --- BAGIAN KRITIS: Ekstraksi Run ID yang lebih robust ---
-          # Setelah 'mlflow run' selesai, model di-log di subfolder mlruns.
-          # Asumsi: eksperimen default adalah '0' atau Anda tahu ID eksperimen Anda.
-          # Mencari subdirektori terbaru (yang baru dibuat) di bawah mlruns/0/
           RUN_DIR=$(find mlruns/0 -maxdepth 1 -mindepth 1 -type d -printf '%T@ %p\n' | sort -n | tail -n 1 | awk '{print $2}')
           
           if [ -z "$RUN_DIR" ]; then
@@ -48,12 +42,10 @@ jobs:
               exit 1
           fi
           
-          # Ekstrak Run ID dari nama direktori
           run_id=$(basename "$RUN_DIR")
-          # --- AKHIR BAGIAN KRITIS ---
-
+          
           echo "Detected MLflow Run ID: $run_id"
-          echo "run_id=$run_id" >> $GITHUB_OUTPUT
+          echo "run_id=$run_id" >> $GITHUB_OUTPUT 
 
   build_and_push_docker:
     runs-on: ubuntu-latest
@@ -87,7 +79,6 @@ jobs:
 
           echo "Building Docker image for MLflow Run ID: $MLFLOW_RUN_ID"
           
-          # Gunakan 'conda run -n mlflow_churn_env' untuk memastikan perintah 'mlflow' ditemukan
           conda run -n mlflow_churn_env mlflow models build-docker \
             --model-uri "runs:/$MLFLOW_RUN_ID/model" \
             --name ibrahimakbararsanata/churn-prediction-model \
