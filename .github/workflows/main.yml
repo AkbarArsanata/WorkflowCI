@@ -9,7 +9,7 @@ jobs:
   train_model:
     runs-on: ubuntu-latest
     outputs:
-      run_id: ${{ steps.run_mlflow.outputs.run_id }}
+      run_id: ${{ steps.get_run_id.outputs.run_id }}
 
     steps:
       - name: Checkout Repository
@@ -25,25 +25,33 @@ jobs:
 
       - name: Configure MLflow Tracking (Optional)
         run: |
-          echo "MLflow tracking configuration complete (if any)."
-          # export MLFLOW_TRACKING_URI=http://your-mlflow-server:5000
+          echo "Using local MLflow tracking (mlruns/ directory)."
+          # export MLFLOW_TRACKING_URI=http://your-server:5000
 
-      - name: Run MLflow Project and Get Run ID
-        id: run_mlflow
+      - name: Run MLflow Project
         run: |
           rm -rf mlruns
+          conda run -n mlflow_churn_env mlflow run MLProject/ -e train_model
 
-          conda run -n mlflow_churn_env mlflow run MLProject/ -e train_model 2>&1
+      - name: Get Run ID from mlruns directory
+        id: get_run_id
+        run: |
+          EXPERIMENT_DIR="mlruns/0"
 
-          RUN_DIR=$(find mlruns/0 -maxdepth 1 -mindepth 1 -type d -printf '%T@ %p\n' | sort -n | tail -n 1 | awk '{print $2}')
-          
-          if [ -z "$RUN_DIR" ]; then
-              echo "Error: Could not find MLflow run directory. Cannot extract Run ID."
-              exit 1
+          if [ ! -d "$EXPERIMENT_DIR" ]; then
+            echo "Error: MLflow experiment directory not found."
+            exit 1
           fi
-          
+
+          RUN_DIR=$(find "$EXPERIMENT_DIR" -maxdepth 1 -mindepth 1 -type d -printf '%T@ %p\n' | sort -n | tail -n 1 | awk '{print $2}')
+
+          if [ -z "$RUN_DIR" ]; then
+            echo "Error: Could not find MLflow run directory."
+            exit 1
+          fi
+
           run_id=$(basename "$RUN_DIR")
-          echo "Detected MLflow Run ID: $run_id"
+          echo "Extracted Run ID: $run_id"
           echo "run_id=$run_id" >> $GITHUB_OUTPUT
 
   build_and_push_docker:
@@ -71,15 +79,17 @@ jobs:
       - name: Build and Push MLflow Model Docker Image
         run: |
           MLFLOW_RUN_ID="${{ needs.train_model.outputs.run_id }}"
-          
+
+          echo "Received MLflow Run ID: $MLFLOW_RUN_ID"
+
           if [ -z "$MLFLOW_RUN_ID" ]; then
-            echo "Error: MLflow Run ID not found from previous job. Cannot build Docker image."
+            echo "Error: MLflow Run ID not found. Exiting."
             exit 1
           fi
 
-          echo "Building Docker image for MLflow Run ID: $MLFLOW_RUN_ID"
-          
-          # Step 1: Build Docker image from MLflow
+          echo "Building Docker image from model at run ID: $MLFLOW_RUN_ID"
+
+          # Step 1: Build Docker image from MLflow model
           conda run -n mlflow_churn_env mlflow models build-docker \
             --model-uri "runs:/$MLFLOW_RUN_ID/model" \
             --name churn-prediction-model
