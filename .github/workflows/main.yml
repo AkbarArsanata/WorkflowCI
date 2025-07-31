@@ -23,24 +23,27 @@ jobs:
           auto-activate-base: false
           activate-environment: mlflow_churn_env 
 
-      - name: Configure MLflow Tracking (Opsional)
+      - name: Configure MLflow Tracking (Optional)
         run: |
-          # Jika Anda menggunakan MLflow Tracking Server eksternal, konfigurasikan di sini.
-          # Contoh: export MLFLOW_TRACKING_URI=http://your-mlflow-tracking-server:5000
-          # Jika Anda tidak mengatur MLFLOW_TRACKING_URI, MLflow akan menggunakan direktori mlruns lokal secara default.
+          # If you use an external MLflow Tracking Server, configure it here.
+          # Example: export MLFLOW_TRACKING_URI=http://your-mlflow-tracking-server:5000
+          # If you do not set MLFLOW_TRACKING_URI, MLflow will use the local mlruns directory by default.
           echo "MLflow tracking configuration complete (if any)."
 
       - name: Run MLflow Project and Get Run ID
         id: run_mlflow
         run: |
-          # Hapus direktori mlruns lama agar tidak salah mengambil run ID
+          # Remove old mlruns directory to avoid confusion with new run IDs
           rm -rf mlruns
           
-          # Jalankan MLflow project
-          # Hapus --no-tracking-uri di sini
+          # Run the MLflow project
+          # Removed --no-conda and --no-tracking-uri as they are not valid options for mlflow run
           conda run -n mlflow_churn_env mlflow run MLProject/ -e train_model 2>&1
 
-          # --- BAGIAN KRITIS: Ekstraksi Run ID yang lebih robust ---
+          # --- CRITICAL PART: More robust Run ID extraction ---
+          # After 'mlflow run' completes, the model is logged in a subfolder within mlruns.
+          # Assuming the default experiment is '0' or you know your experiment ID.
+          # Find the newest subdirectory (the one just created) under mlruns/0/
           RUN_DIR=$(find mlruns/0 -maxdepth 1 -mindepth 1 -type d -printf '%T@ %p\n' | sort -n | tail -n 1 | awk '{print $2}')
           
           if [ -z "$RUN_DIR" ]; then
@@ -48,8 +51,9 @@ jobs:
               exit 1
           fi
           
+          # Extract the Run ID from the directory name
           run_id=$(basename "$RUN_DIR")
-          # --- AKHIR BAGIAN KRITIS ---
+          # --- END CRITICAL PART ---
 
           echo "Detected MLflow Run ID: $run_id"
           echo "run_id=$run_id" >> $GITHUB_OUTPUT 
@@ -73,7 +77,10 @@ jobs:
         uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKER_USERNAME }}
-          password: ${{ secrets.DOCKER_PASSWORD }}
+          password: ${{ secrets.DOCKER_PASSWORD }} # <--- Ensure this line exists and points to your secret
+          # Remove 'ecr: auto' and 'logout: true' unless you specifically need them.
+          # 'ecr: auto' is for AWS ECR, not DockerHub.
+          # 'logout: true' is default behavior, no need to explicitly state it.
 
       - name: Build and Push MLflow Model Docker Image
         run: |
