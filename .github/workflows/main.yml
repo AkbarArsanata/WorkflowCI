@@ -3,7 +3,7 @@ name: Train and Register Churn Model
 on:
   push:
     branches: [ main ]
-  workflow_dispatch:  # Agar bisa run manual dari GitHub UI
+  workflow_dispatch:
 
 jobs:
   train:
@@ -13,17 +13,14 @@ jobs:
     - name: Checkout repository
       uses: actions/checkout@v3
 
-    - name: Set up Python 3.10
+    - name: Set up Python
       uses: actions/setup-python@v4
       with:
         python-version: '3.10'
 
-    - name: Install Micromamba (Conda Lightweight)
-      uses: mamba-org/provision-with-micromamba@v15
-
-    - name: Install dependencies via conda.yaml
-      run: micromamba run -n base micromamba create -n churn_env -f MLProject/conda.yaml -y
+    - name: Install MLflow CLI
+      run: pip install mlflow
 
     - name: Run MLflow Project
       run: |
-        micromamba run -n churn_env mlflow run MLProject
+        mlflow run MLProject --no-conda
