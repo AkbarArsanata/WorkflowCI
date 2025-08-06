@@ -91,21 +91,25 @@ for model_name, model in models.items():
 
         # Buat folder artifacts jika belum ada
         os.makedirs("artifacts", exist_ok=True)
-        
+
         # Ambil run_id dari run yang aktif
         run_id = run.info.run_id
-        
+
         # Path ke model dalam mlruns
         source_model_path = f"mlruns/0/{run_id}/artifacts/{model_name_for_registry}"
-        
+
+        # Pastikan directory model ada sebelum copy
+        if not os.path.exists(source_model_path):
+            raise FileNotFoundError(f"Model directory not found: {source_model_path}")
+
         # Salin model ke folder artifacts
         destination_path = f"artifacts/{model_name_for_registry}"
         shutil.copytree(source_model_path, destination_path, dirs_exist_ok=True)
-        
+
         # Menggunakan MlflowClient untuk mengatur alias ke 'Production'
         from mlflow.tracking import MlflowClient
         client = MlflowClient()
-        
+
         # Ambil versi model yang baru saja terdaftar (versi terbaru)
         latest_version_obj = client.get_latest_versions(model_name_for_registry, stages=["None"])[0]
         latest_version = latest_version_obj.version
