@@ -1,103 +1,29 @@
-name: MLflow Churn Prediction Training
+name: Train and Register Churn Model
 
 on:
   push:
-    branches:
-      - main
+    branches: [ main ]
+  workflow_dispatch:  # Agar bisa run manual dari GitHub UI
 
 jobs:
-  train_model:
+  train:
     runs-on: ubuntu-latest
-    # Output dari job ini akan digunakan oleh job berikutnya
-    outputs:
-      run_id: ${{ steps.get_mlflow_run_id.outputs.run_id }} # Mengambil output dari step yang namanya 'get_mlflow_run_id'
 
     steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v4
+    - name: Checkout repository
+      uses: actions/checkout@v3
 
-      - name: Set up Conda Environment
-        uses: conda-incubator/setup-miniconda@v3
-        with:
-          python-version: 3.9
-          environment-file: MLProject/conda.yaml
-          auto-activate-base: false
-          activate-environment: mlflow_churn_env
+    - name: Set up Python 3.10
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.10'
 
-      - name: Configure MLflow Tracking (Optional)
-        run: |
-          # If you use an external MLflow Tracking Server, configure it here.
-          # Example: export MLFLOW_TRACKING_URI=http://your-mlflow-tracking-server:5000
-          # If you do not set MLFLOW_TRACKING_URI, MLflow will use the local mlruns directory by default.
-          echo "MLflow tracking configuration complete (if any)."
+    - name: Install Micromamba (Conda Lightweight)
+      uses: mamba-org/provision-with-micromamba@v15
 
-      - name: Run MLflow Project
-        # Memberikan ID ke langkah ini agar outputnya bisa direferensikan
-        id: run_mlflow_project # Nama ID yang lebih deskriptif
-        run: |
-          # Remove old mlruns directory to avoid confusion with new run IDs
-          rm -rf mlruns
-          
-          # Run the MLflow project
-          # Output (stdout/stderr) dari command ini akan berisi informasi run ID
-          conda run -n mlflow_churn_env mlflow run MLProject/ -e train_model
+    - name: Install dependencies via conda.yaml
+      run: micromamba run -n base micromamba create -n churn_env -f MLProject/conda.yaml -y
 
-      - name: Get MLflow Run ID
-        id: get_mlflow_run_id # Memberikan ID ke langkah ini untuk mengambil output
-        run: |
-          # Mencari direktori run terbaru di mlruns/0/
-          # Ini adalah cara paling robust untuk mendapatkan run ID yang baru dibuat
-          RUN_DIR=$(find mlruns/0 -maxdepth 1 -mindepth 1 -type d -printf '%T@ %p\n' | sort -n | tail -n 1 | awk '{print $2}')
-          
-          if [ -z "$RUN_DIR" ]; then
-              echo "Error: Could not find MLflow run directory. Cannot extract Run ID."
-              exit 1
-          fi
-          
-          # Ekstrak Run ID dari nama direktori
-          run_id=$(basename "$RUN_DIR")
-          
-          echo "Detected MLflow Run ID: $run_id"
-          # Set output run_id untuk job ini agar bisa diakses oleh job lain
-          echo "run_id=$run_id" >> $GITHUB_OUTPUT
-
-  build_and_push_docker:
-    runs-on: ubuntu-latest
-    # Job ini bergantung pada job train_model dan akan mengambil outputnya
-    needs: train_model
-    steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v4
-
-      - name: Set up Conda Environment
-        uses: conda-incubator/setup-miniconda@v3
-        with:
-          python-version: 3.9
-          environment-file: MLProject/conda.yaml
-          auto-activate-base: false
-          activate-environment: mlflow_churn_env
-
-      - name: Login to DockerHub
-        uses: docker/login-action@v3
-        with:
-          username: ${{ secrets.DOCKER_USERNAME }}
-          password: ${{ secrets.DOCKER_ACCESS_TOKEN }}
-
-      - name: Build and Push MLflow Model Docker Image
-        run: |
-          # Mengambil Run ID dari output job train_model
-          MLFLOW_RUN_ID="${{ needs.train_model.outputs.run_id }}"
-          
-          if [ -z "$MLFLOW_RUN_ID" ]; then
-            echo "Error: MLflow Run ID not found from previous job. Cannot build Docker image."
-            exit 1
-          fi
-
-          echo "Building Docker image for MLflow Run ID: $MLFLOW_RUN_ID"
-          
-          # Perintah build-docker yang sudah diperbaiki (tanpa --tag)
-          conda run -n mlflow_churn_env mlflow models build-docker \
-            --model-uri "runs:/$MLFLOW_RUN_ID/model" \
-            --name ibrahimakbararsanata/churn-prediction-model:latest
-
-          docker push ibrahimakbararsanata/churn-prediction-model:latest
+    - name: Run MLflow Project
+      run: |
+        micromamba run -n churn_env mlflow run MLProject

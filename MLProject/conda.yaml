@@ -1,13 +1,12 @@
-name: mlflow_churn_env # Nama lingkungan Conda
+name: mlflow_churn_env
 channels:
   - defaults
-  - conda-forge # Disarankan untuk akses paket yang lebih luas
+  - conda-forge
 dependencies:
-  - python=3.9 # Versi Python yang konsisten
-  - pandas
-  - scikit-learn
-  - numpy
-  - mlflow>=1.25.0 # <--- UBAH DI SINI: Tentukan versi minimal 1.25.0
+  - python=3.10
   - pip
+  - pandas
+  - numpy
+  - scikit-learn=1.7.0  # <--- Change this line
   - pip:
-    - ipykernel # Opsional, berguna untuk pengembangan lokal di Jupyter
+    - mlflow

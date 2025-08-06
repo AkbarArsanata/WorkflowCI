@@ -1,0 +1,32 @@
+{
+    "dataframe_split": {
+        "columns": [
+            "CreditScore",
+            "Age",
+            "Tenure",
+            "Balance",
+            "NumOfProducts",
+            "HasCrCard",
+            "IsActiveMember",
+            "EstimatedSalary",
+            "Gender_Male",
+            "Geography_Germany",
+            "Geography_Spain"
+        ],
+        "data": [
+            [
+                -0.6200377609902943,
+                -0.7142207804654014,
+                -0.6953934861551795,
+                0.32993734505533895,
+                0.8084361535388619,
+                0,
+                0,
+                -1.019605111673559,
+                1,
+                1,
+                0
+            ]
+        ]
+    }
+}
