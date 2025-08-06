@@ -1,59 +1,40 @@
-# Nama workflow yang akan ditampilkan di tab "Actions" GitHub
 name: ML Model CI - Train and Register
 
-# Trigger untuk menjalankan workflow
 on:
   push:
     branches:
-      - main  # Jalankan saat ada push ke branch main
+      - main
   pull_request:
     branches:
-      - main  # Jalankan saat ada pull request ke branch main
+      - main
 
 jobs:
   train-and-register-model:
-    # Menggunakan runner Ubuntu versi terbaru
     runs-on: ubuntu-latest
 
     steps:
-      # Langkah 1: Checkout kode dari repositori
-      # Langkah ini akan mengunduh semua file, termasuk file CSV di dalam direktori MLProject.
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # Langkah 2: Setup Conda env dari file dan langsung aktifkan
-      # Action ini akan secara otomatis:
-      # 1. Menginstal Mambaforge.
-      # 2. Membuat environment dari file conda.yaml.
-      # 3. Mengaktifkan environment tersebut untuk semua langkah selanjutnya.
       - name: Set up Conda environment from file
         uses: conda-incubator/setup-miniconda@v3
         with:
-          # Secara otomatis membuat dan mengaktifkan environment dari file ini
           environment-file: MLProject/conda.yaml
-          
-          # Menggunakan Mamba untuk instalasi yang lebih cepat
           use-mamba: true
-          
-          # Nama environment yang akan diaktifkan (harus sesuai dengan nama di conda.yaml)
           activate-environment: mlflow_churn_env
 
-      # Langkah 3: Menjalankan skrip training model
-      # Environment Conda sudah aktif dari langkah sebelumnya.
       - name: Run ML Training and Registration Script
-        # 'working-directory' mengubah direktori kerja ke MLProject sebelum menjalankan skrip.
-        # Ini memastikan skrip 'modelling.py' dapat menemukan file CSV ('churn_train_preprocessed.csv')
-        # pada path relatif yang benar.
         working-directory: ./MLProject
-        
-        # 'shell: bash -l {0}' memastikan shell diinisialisasi dengan benar untuk Conda
         shell: bash -l {0}
         run: |
           echo "Current directory: $(pwd)"
           echo "Listing files in current directory..."
           ls -la
-          
           echo "Running training script in Conda environment..."
-          # Tidak perlu 'conda activate' lagi di sini.
-          # Cukup panggil skrip python karena kita sudah berada di direktori yang benar.
           python modelling.py
+
+      - name: Upload trained model artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: trained-ml-model
+          path: MLProject/artifacts/  # Ganti sesuai path file hasil model
