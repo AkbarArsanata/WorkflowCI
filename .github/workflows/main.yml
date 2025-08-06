@@ -1,33 +1,49 @@
-name: Run MLflow Project with Model Registry
+# Nama workflow yang akan ditampilkan di tab "Actions" GitHub
+name: ML Model CI - Train and Register
 
+# Trigger untuk menjalankan workflow
 on:
   push:
     branches:
-      - main
+      - main  # Jalankan saat ada push ke branch main
+  pull_request:
+    branches:
+      - main  # Jalankan saat ada pull request ke branch main
 
 jobs:
-  train-and-log:
-    name: Train Model and Log with MLflow
+  train-and-register-model:
+    # Menggunakan runner Ubuntu versi terbaru
     runs-on: ubuntu-latest
 
-    env:
-      MLFLOW_TRACKING_URI: http://your-tracking-server:5000  # Ganti dengan URI Tracking MLflow kamu
-
     steps:
+      # Langkah 1: Checkout kode dari repositori
       - name: Checkout repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
-      - name: Set up Micromamba
-        uses: mamba-org/setup-micromamba@v1
+      # Langkah 2: Setup environment menggunakan Mamba dari file conda.yaml
+      # Mamba adalah implementasi ulang Conda yang lebih cepat
+      - name: Set up Mambaforge
+        uses: conda-incubator/setup-miniconda@v3
         with:
-          micromamba-version: "latest"
-          environment-file: MLProject/conda.yaml
-          environment-name: mlflow_churn_env
-          init-shell: bash
-          cache-environment: true
-
-      - name: Run MLflow Project
+          python-version: 3.9 # Sesuaikan dengan versi python di conda.yaml Anda
+          miniforge-variant: Mambaforge
+          use-mamba: true
+          
+      - name: Create and activate Conda environment
         shell: bash -l {0}
         run: |
-          cd MLProject
-          mlflow run . --no-conda
+          mamba env create -f MLProject/conda.yaml
+          echo "conda activate churn-prediction-env" >> $HOME/.bashrc # Ganti 'churn-prediction-env' dengan nama env di conda.yaml
+          
+      # Langkah 3: Menjalankan skrip training model
+      - name: Run ML Training and Registration Script
+        shell: bash -l {0}
+        env:
+          # Variabel environment ini akan diambil dari GitHub Secrets
+          # Skrip Python Anda akan menggunakannya untuk terhubung ke MLflow
+          MLFLOW_TRACKING_URI: ${{ secrets.MLFLOW_TRACKING_URI }}
+          MLFLOW_TRACKING_USERNAME: ${{ secrets.MLFLOW_TRACKING_USERNAME }}
+          MLFLOW_TRACKING_PASSWORD: ${{ secrets.MLFLOW_TRACKING_PASSWORD }}
+        run: |
+          conda activate churn-prediction-env # Ganti 'churn-prediction-env' dengan nama env di conda.yaml
+          python MLProject/modelling.py
