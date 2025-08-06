@@ -1,32 +1,33 @@
-name: Train ML Model via MLflow
+name: Run MLflow Project with Model Registry
 
 on:
   push:
-    branches: [main]
-  pull_request:
-    branches: [main]
+    branches:
+      - main
 
 jobs:
-  train:
+  train-and-log:
+    name: Train Model and Log with MLflow
     runs-on: ubuntu-latest
 
+    env:
+      MLFLOW_TRACKING_URI: http://your-tracking-server:5000  # Ganti dengan URI Tracking MLflow kamu
+
     steps:
-    - name: Checkout repository
-      uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v3
 
-    - name: Set up Miniconda
-      uses: conda-incubator/setup-miniconda@v2
-      with:
-        activate-environment: mlflow_churn_env
-        environment-file: mlproject/conda.yaml
-        auto-activate-base: false
-        use-mamba: true
-        update-conda: false  # 💡 penting: pakai create, bukan update
+      - name: Set up Micromamba
+        uses: mamba-org/setup-micromamba@v1
+        with:
+          micromamba-version: "latest"
+          environment-file: MLProject/conda.yaml
+          environment-name: mlflow_churn_env
+          init-shell: bash
+          cache-environment: true
 
-    - name: Verify conda env
-      run: conda info --envs
-
-    - name: Run MLflow project
-      run: |
-        cd mlproject
-        mlflow run . --env-manager=local
+      - name: Run MLflow Project
+        shell: bash -l {0}
+        run: |
+          cd MLProject
+          mlflow run . --no-conda
