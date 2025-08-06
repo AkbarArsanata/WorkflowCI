@@ -7,6 +7,7 @@ import mlflow.sklearn
 from mlflow.models import infer_signature
 import numpy as np
 import os
+import shutil
 
 # --- Load Data ---
 try:
@@ -87,6 +88,19 @@ for model_name, model in models.items():
             signature=signature,
             input_example=X_val.head(5)
         )
+
+        # Buat folder artifacts jika belum ada
+        os.makedirs("artifacts", exist_ok=True)
+        
+        # Ambil run_id dari run yang aktif
+        run_id = run.info.run_id
+        
+        # Path ke model dalam mlruns
+        source_model_path = f"mlruns/0/{run_id}/artifacts/{model_name_for_registry}"
+        
+        # Salin model ke folder artifacts
+        destination_path = f"artifacts/{model_name_for_registry}"
+        shutil.copytree(source_model_path, destination_path, dirs_exist_ok=True)
         
         # Menggunakan MlflowClient untuk mengatur alias ke 'Production'
         from mlflow.tracking import MlflowClient
