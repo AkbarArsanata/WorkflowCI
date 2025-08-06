@@ -100,7 +100,14 @@ for model_name, model in models.items():
 
         # Pastikan directory model ada sebelum copy
         if not os.path.exists(source_model_path):
-            raise FileNotFoundError(f"Model directory not found: {source_model_path}")
+            # Try to download artifact if not found locally
+            try:
+                import mlflow
+                source_model_path = mlflow.artifacts.download_artifacts(
+                    artifact_uri=f"runs:/{run_id}/{model_name_for_registry}"
+                )
+            except Exception as e:
+                raise FileNotFoundError(f"Model directory not found locally or remotely: {source_model_path}") from e
 
         # Salin model ke folder artifacts
         destination_path = f"artifacts/{model_name_for_registry}"
