@@ -26,7 +26,7 @@ jobs:
         uses: conda-incubator/setup-miniconda@v3
         with:
           python-version: 3.9 # Sesuaikan dengan versi python di conda.yaml Anda
-          miniforge-variant: Mambaforge
+          miniforge-variant: Miniforge3
           use-mamba: true
           
       - name: Create and activate Conda environment
